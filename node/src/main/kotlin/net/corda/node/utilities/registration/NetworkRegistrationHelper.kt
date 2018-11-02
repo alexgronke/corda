@@ -41,7 +41,7 @@ open class NetworkRegistrationHelper(
         private val certService: NetworkRegistrationService,
         private val networkRootTrustStorePath: Path,
         networkRootTrustStorePassword: String,
-        private val keyAlias: String,
+        private val nodeCaKeyAlias: String,
         private val certRole: CertRole,
         private val nextIdleDuration: (Duration?) -> Duration? = FixedPeriodLimitedRetrialStrategy(10, Duration.ofMinutes(1))
 ) {
@@ -82,10 +82,10 @@ open class NetworkRegistrationHelper(
         certificatesDirectory.createDirectories()
         // We need this in case cryptoService and certificateStore share the same KeyStore (for backwards compatibility purposes).
         // If we didn't, then an update to cryptoService wouldn't be reflected to certificateStore that is already loaded in memory.
-        val certStore : CertificateStore = if (cryptoService is BCCryptoService) cryptoService.certificateStore else certificateStore
+        val certStore: CertificateStore = if (cryptoService is BCCryptoService) cryptoService.certificateStore else certificateStore
 
         // SELF_SIGNED_PRIVATE_KEY is used as progress indicator.
-        if (certStore.contains(keyAlias) && !certStore.contains(SELF_SIGNED_PRIVATE_KEY)) {
+        if (certStore.contains(nodeCaKeyAlias) && !certStore.contains(SELF_SIGNED_PRIVATE_KEY)) {
             println("Certificate already exists, Corda node will now terminate...")
             return
         }
@@ -96,28 +96,28 @@ open class NetworkRegistrationHelper(
         // When registration succeeds, this entry should be deleted.
         certStore.query { setPrivateKey(SELF_SIGNED_PRIVATE_KEY, AliasPrivateKey(SELF_SIGNED_PRIVATE_KEY), listOf(DummyKeysAndCerts.DUMMY_ECDSAR1_CERT), certificateStore.entryPassword) }
 
-        val publicKey = loadOrGenerateKeyPair()
+        val nodeCaPublicKey = loadOrGenerateKeyPair()
 
-        val requestId = submitOrResumeCertificateSigningRequest(publicKey, cryptoService.getSigner(keyAlias))
+        val requestId = submitOrResumeCertificateSigningRequest(nodeCaPublicKey, cryptoService.getSigner(nodeCaKeyAlias))
 
-        val certificates = pollServerForCertificates(requestId)
-        validateCertificates(publicKey, certificates)
+        val nodeCaCertificates = pollServerForCertificates(requestId)
+        validateCertificates(nodeCaPublicKey, nodeCaCertificates)
 
-        certStore.setCertPathOnly(keyAlias, certificates)
+        certStore.setCertPathOnly(nodeCaKeyAlias, nodeCaCertificates)
         certStore.value.internal.deleteEntry(SELF_SIGNED_PRIVATE_KEY)
         certStore.value.save()
-        println("Private key '$keyAlias' and its certificate-chain stored successfully.")
+        println("Private key '$nodeCaKeyAlias' and its certificate-chain stored successfully.")
 
-        onSuccess(publicKey, cryptoService.getSigner(keyAlias), certificates, tlsCrlIssuerCert?.subjectX500Principal?.toX500Name())
+        onSuccess(nodeCaPublicKey, cryptoService.getSigner(nodeCaKeyAlias), nodeCaCertificates, tlsCrlIssuerCert?.subjectX500Principal?.toX500Name())
         // All done, clean up temp files.
         requestIdStore.deleteIfExists()
     }
 
     private fun loadOrGenerateKeyPair(): PublicKey {
-        return if (cryptoService.containsKey(keyAlias)) {
-            cryptoService.getPublicKey(keyAlias)!!
+        return if (cryptoService.containsKey(nodeCaKeyAlias)) {
+            cryptoService.getPublicKey(nodeCaKeyAlias)!!
         } else {
-            cryptoService.generateKeyPair(keyAlias, X509Utilities.DEFAULT_TLS_SIGNATURE_SCHEME.schemeNumberID)
+            cryptoService.generateKeyPair(nodeCaKeyAlias, X509Utilities.DEFAULT_TLS_SIGNATURE_SCHEME.schemeNumberID)
         }
     }
 
@@ -293,29 +293,33 @@ class NodeRegistrationHelper(
         createTruststore(certificates.last())
     }
 
-    private fun createSSLKeystore(publicKey: PublicKey, contentSigner: ContentSigner, certificates: List<X509Certificate>, tlsCertCrlIssuer: X500Name?) {
+    private fun createSSLKeystore(nodeCaPublicKey: PublicKey, nodeCaContentSigner: ContentSigner, nodeCaCertificateChain: List<X509Certificate>, tlsCertCrlIssuer: X500Name?) {
         val keyStore = config.p2pSslOptions.keyStore
         val certificateStore = keyStore.get(createNew = true)
         certificateStore.update {
             println("Generating SSL certificate for node messaging service.")
             val sslKeyPair = Crypto.generateKeyPair(X509Utilities.DEFAULT_TLS_SIGNATURE_SCHEME)
-            val issuerCertificate = certificates.first()
+            val issuerCertificate = nodeCaCertificateChain.first()
             val validityWindow = X509Utilities.getCertificateValidityWindow(DEFAULT_VALIDITY_WINDOW.first, DEFAULT_VALIDITY_WINDOW.second, issuerCertificate)
 
             val sslCert = X509Utilities.createCertificate(
                     CertificateType.TLS,
-                    issuerCertificate.issuerX500Principal,
-                    publicKey,
-                    contentSigner,
+                    issuerCertificate.subjectX500Principal,
+                    nodeCaPublicKey,
+                    nodeCaContentSigner,
                     config.myLegalName.x500Principal,
                     sslKeyPair.public,
                     validityWindow,
                     crlDistPoint = config.tlsCertCrlDistPoint?.toString(),
                     crlIssuer = tlsCertCrlIssuer)
+
             logger.info("Generated TLS certificate: $sslCert")
-            setPrivateKey(CORDA_CLIENT_TLS, sslKeyPair.private, listOf(sslCert) + certificates, keyStore.entryPassword)
+
+            val sslCertificateChain: List<X509Certificate> = listOf(sslCert) + nodeCaCertificateChain
+            X509Utilities.validateCertificateChain(rootCert, sslCertificateChain)
+            setPrivateKey(CORDA_CLIENT_TLS, sslKeyPair.private, sslCertificateChain, keyStore.entryPassword)
         }
-        println("SSL private key and certificate stored in ${keyStore.path}.")
+        println("SSL private key and certificate chain stored in ${keyStore.path}.")
     }
 
     private fun createTruststore(rootCertificate: X509Certificate) {

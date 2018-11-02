@@ -18,13 +18,10 @@ import net.corda.core.identity.AbstractParty
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.identity.Party
 import net.corda.core.identity.PartyAndCertificate
-import net.corda.core.internal.FlowStateMachine
-import net.corda.core.internal.NamedCacheFactory
-import net.corda.core.internal.VisibleForTesting
+import net.corda.core.internal.*
 import net.corda.core.internal.concurrent.map
 import net.corda.core.internal.concurrent.openFuture
 import net.corda.core.internal.notary.NotaryService
-import net.corda.core.internal.uncheckedCast
 import net.corda.core.messaging.*
 import net.corda.core.node.*
 import net.corda.core.node.services.*
@@ -333,6 +330,8 @@ abstract class AbstractNode<S>(val configuration: NodeConfiguration,
 
         startDatabase()
         val (identity, identityKeyPair) = obtainIdentity()
+        X509Utilities.validateCertPath(trustRoot, identity.certPath)
+
         val nodeCa = configuration.signingCertificateStore.get()[CORDA_CLIENT_CA]
         identityService.start(trustRoot, listOf(identity.certificate, nodeCa))
 
@@ -802,17 +801,17 @@ abstract class AbstractNode<S>(val configuration: NodeConfiguration,
      * Note that obtainIdentity returns a KeyPair with an [AliasPrivateKey].
      */
     private fun obtainIdentity(): Pair<PartyAndCertificate, KeyPair> {
-        val privateKeyAlias = "$NODE_IDENTITY_ALIAS_PREFIX-private-key"
+        val legalIdentityPrivateKeyAlias = "$NODE_IDENTITY_ALIAS_PREFIX-private-key"
 
-        if (!cryptoService.containsKey(privateKeyAlias)) {
-            log.info("$privateKeyAlias not found in key store, generating fresh key!")
-            storeLegalIdentity(privateKeyAlias)
+        if (!cryptoService.containsKey(legalIdentityPrivateKeyAlias)) {
+            log.info("$legalIdentityPrivateKeyAlias not found in key store, generating fresh key!")
+            storeLegalIdentity(legalIdentityPrivateKeyAlias)
         }
         val signingCertificateStore = configuration.signingCertificateStore.get()
-        val x509Cert = signingCertificateStore.query { getCertificate(privateKeyAlias) }
+        val x509Cert = signingCertificateStore.query { getCertificate(legalIdentityPrivateKeyAlias) }
 
         // TODO: Use configuration to indicate composite key should be used instead of public key for the identity.
-        val certificates = signingCertificateStore.query { getCertificateChain(privateKeyAlias) }
+        val certificates: List<X509Certificate> = signingCertificateStore.query { getCertificateChain(legalIdentityPrivateKeyAlias) }
         check(certificates.first() == x509Cert) {
             "Certificates from key store do not line up!"
         }
@@ -823,7 +822,7 @@ abstract class AbstractNode<S>(val configuration: NodeConfiguration,
             throw ConfigurationException("The name '$legalName' for $NODE_IDENTITY_ALIAS_PREFIX doesn't match what's in the key store: $subject")
         }
 
-        return getPartyAndCertificatePlusAliasKeyPair(certificates, privateKeyAlias)
+        return getPartyAndCertificatePlusAliasKeyPair(certificates, legalIdentityPrivateKeyAlias)
     }
 
     /** Loads pre-generated notary service cluster identity. */
