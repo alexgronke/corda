@@ -2,11 +2,11 @@ package net.corda.node.services.keys.cryptoservices
 
 import net.corda.core.crypto.Crypto
 import net.corda.core.crypto.newSecureRandom
-import net.corda.cryptoservice.CryptoService
 import net.corda.node.services.config.NodeConfiguration
 import net.corda.nodeapi.internal.config.CertificateStore
 import net.corda.nodeapi.internal.crypto.ContentSignerBuilder
 import net.corda.nodeapi.internal.crypto.X509Utilities
+import net.corda.nodeapi.internal.cryptoservice.CryptoService
 import org.bouncycastle.operator.ContentSigner
 import java.security.KeyPair
 import java.security.KeyStore
@@ -14,8 +14,8 @@ import java.security.PublicKey
 
 /**
  * Basic implementation of a [CryptoService] that uses BouncyCastle for cryptographic operations
- * and a Java KeyStore to store private keys. BCCryptoService reuses the [NodeConfiguration.signingCertificateStore] to
- * store keys.
+ * and a Java KeyStore in the form of [CertificateStore] to store private keys.
+ * This service reuses the [NodeConfiguration.signingCertificateStore] to store keys.
  */
 class BCCryptoService(private val nodeConf: NodeConfiguration) : CryptoService {
 

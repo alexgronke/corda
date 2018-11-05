@@ -6,10 +6,10 @@ import net.corda.core.internal.NamedCacheFactory
 import net.corda.core.serialization.SingletonSerializeAsToken
 import net.corda.core.serialization.serialize
 import net.corda.core.utilities.MAX_HASH_HEX_SIZE
-import net.corda.cryptoservice.CryptoService
 import net.corda.node.services.identity.PersistentIdentityService
 import net.corda.core.crypto.AliasPrivateKey
 import net.corda.node.utilities.AppendOnlyPersistentMap
+import net.corda.nodeapi.internal.cryptoservice.CryptoService
 import net.corda.nodeapi.internal.persistence.CordaPersistence
 import net.corda.nodeapi.internal.persistence.NODE_DATABASE_PREFIX
 import org.apache.commons.lang.ArrayUtils.EMPTY_BYTE_ARRAY

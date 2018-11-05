@@ -1,9 +1,11 @@
-package net.corda.cryptoservice
+package net.corda.nodeapi.internal.cryptoservice
 
+import net.corda.core.DoNotImplement
 import org.bouncycastle.operator.ContentSigner
 import java.security.KeyPair
 import java.security.PublicKey
 
+@DoNotImplement
 interface CryptoService {
 
     /**
@@ -26,7 +28,7 @@ interface CryptoService {
 
     /**
      * Sign a [ByteArray] using the private key identified by the input alias.
-     * @return the signature bytes whose format depends on the underlying signature scheme and it should
+     * Returns the signature bytes whose format depends on the underlying signature scheme and it should
      * be Java BouncyCastle compatible (i.e., ASN.1 DER-encoded for ECDSA).
      */
     fun sign(alias: String, data: ByteArray): ByteArray
