@@ -21,11 +21,11 @@ class AliasPrivateKeyTest {
         val aliasPrivateKey = AliasPrivateKey(alias)
         val certificatesDirectory = tempFolder.root.toPath()
         val signingCertStore = CertificateStoreStubs.Signing.withCertificatesDirectory(certificatesDirectory, "keystorepass").get(createNew = true)
-        signingCertStore.query { setPrivateKey(alias, aliasPrivateKey, listOf(DummyKeysAndCerts.DUMMY_ECDSAR1_CERT), "entrypassword") }
+        signingCertStore.query { setPrivateKey(alias, aliasPrivateKey, listOf(NOT_YET_REGISTERED_MARKER_KEYS_AND_CERTS.ECDSAR1_CERT), "entrypassword") }
         // We can retrieve the certificate.
         assertTrue { signingCertStore.contains(alias) }
         // We can retrieve the certificate.
-        assertEquals(DummyKeysAndCerts.DUMMY_ECDSAR1_CERT, signingCertStore[alias])
+        assertEquals(NOT_YET_REGISTERED_MARKER_KEYS_AND_CERTS.ECDSAR1_CERT, signingCertStore[alias])
         // Although we can store an AliasPrivateKey, we cannot retrieve it. But, it's fine as we use certStore for storing/handling certs only.
         assertFailsWith<IllegalArgumentException>("Unrecognised algorithm: 2.26.40086077608615255153862931087626791001") {
             signingCertStore.query { getPrivateKey(alias, "entrypassword") }
