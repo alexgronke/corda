@@ -1,4 +1,4 @@
-package net.corda.nodeapi.internal.cryptoservice
+package net.corda.node.internal.cryptoservice
 
 import net.corda.core.DoNotImplement
 import org.bouncycastle.operator.ContentSigner
